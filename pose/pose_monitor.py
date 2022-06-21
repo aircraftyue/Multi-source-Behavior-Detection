@@ -27,7 +27,7 @@ class PoseMonitor:
         self.fps_time = 0            # used to calculate fps.
         self.i = 0                   # used to save img from camera.
         self.close_monitor = False
-        VIDEO_PATH = './pose/videos/fall_2.mp4' # for test
+        VIDEO_PATH = './pose/videos/fall_50_ways.mp4' # for test
 
         # Lode Model and TfPose Estimator
         logger.debug('initialization %s : %s' % (MODEL_NAME, get_graph_path(MODEL_NAME)))
@@ -42,11 +42,14 @@ class PoseMonitor:
 
         # Open Camera
         logger.info('cam read+')
-        # self.cam = cv2.VideoCapture(CAMERA_INDEX)
-        # for test
-        self.cap = cv2.VideoCapture(VIDEO_PATH) 
+        if CAMERA_INDEX is not None:
+            self.cap = cv2.VideoCapture(CAMERA_INDEX)
+            logger.info('Opening camera...')
+        else:
+            self.cap = cv2.VideoCapture(VIDEO_PATH) 
+            logger.info('Reading video...')
         if not self.cap.isOpened():
-            logger.error('Error opening video stream or file')
+            logger.error('Error opening video stream or file! ')
 
 
     def _text_save(self, filename, data):
@@ -94,35 +97,45 @@ class PoseMonitor:
         return joints_humans
 
     def run(self):
-        # if not self.cam.isOpened():
-        #     logger.error('Camera is not useable.')
+
         if not self.cap.isOpened():
             logger.error('Error opening video stream or file')
 
-        # while self.cam.isOpened():
-            # ret_val, image = self.cam.read()
+        frame_cnt = 0 # 控制帧率
+
         while self.cap.isOpened():
+
             ret_val, image = self.cap.read()
+            if not ret_val:
+                logger.error('Error reading frame from cap!')
+                break
 
-            humans = self.e.inference(image, resize_to_default=(self.w > 0 and self.h > 0), upsample_size=self.RESIZE_OUT_RATIO)
-            # humans is a list with a single element, a string. 
+            frame_cnt = frame_cnt + 1 
 
-            # Extract joints from humans.
-            joints_humans = self._extract_joints(humans) 
-            # Analyze the coordinate of body part.
-            statuses = self.ap.analyze_joints(image, joints_humans)
-            # Draw skeleton.
-            image, body_boxes = TfPoseEstimator.draw_skeleton(image, humans, statuses, imgcopy=False)
+            if frame_cnt % 3 == 0: # 降低帧率为输入的1/3
+                frame_cnt = 0 # 防止溢出
+                
+                humans = self.e.inference(image, resize_to_default=(self.w > 0 and self.h > 0), upsample_size=self.RESIZE_OUT_RATIO)
+                # humans is a list with a single element, a string. 
 
-            cv2.putText(image,
-                        "FPS: %f" % (1.0 / (time.time() - self.fps_time)),
-                        (10, 10),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                        (0, 255, 0), 2)
+                # Extract joints from humans.
+                joints_humans = self._extract_joints(humans) 
+                # Analyze the coordinate of body part.
+                statuses = self.ap.analyze_joints(image, joints_humans)
+                logger.info(f'Statuses: {statuses}')
+                # Draw skeleton.
+                image, body_boxes = TfPoseEstimator.draw_skeleton(image, humans, statuses, imgcopy=False)
 
-            # TODO: GUI读取这里更新好的image,显示在GUI内部窗口区域上
-            cv2.imshow('tf-pose-estimation result', image)
-            self.fps_time = time.time()
+                cv2.putText(image,
+                            "FPS: %f" % (1.0 / (time.time() - self.fps_time)),
+                            (10, 10),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            (0, 255, 0), 2)
 
+                # TODO: GUI读取这里更新好的image,显示在GUI内部窗口区域上
+                cv2.imshow('tf-pose-estimation result', image)
+                self.fps_time = time.time()
+
+            # 每帧检测控制按键
             if (cv2.waitKey(1) & 0xFF) == 27: # ESC
                 break
             if (cv2.waitKey(1) & 0xFF) == ord('s'):
@@ -140,5 +153,5 @@ class PoseMonitor:
 
 if __name__ == '__main__':
     print('Run Pose Monitor separately.')
-    monitor = PoseMonitor(camera_index=0)
+    monitor = PoseMonitor(camera_index=0) # camera_index: None is video
     monitor.run()
