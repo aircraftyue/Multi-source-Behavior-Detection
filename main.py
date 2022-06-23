@@ -1,8 +1,11 @@
+import os
 import location
 from pose import pose_monitor
+from camera.ZedCamera import ZedCamera
 
 if __name__ == '__main__':
 
-    print('Run Pose Monitor separately.')
-    monitor = pose_monitor.PoseMonitor(camera_index=0)
-    monitor.run()
+    cam = ZedCamera()
+
+    monitor = pose_monitor.PoseMonitor()
+    monitor.run(cam)

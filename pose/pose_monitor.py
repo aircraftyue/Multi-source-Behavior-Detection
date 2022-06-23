@@ -29,7 +29,7 @@ class PoseMonitor:
         self.close_monitor = False
         VIDEO_PATH = './pose/videos/fall_50_ways.mp4' # for test
 
-        # Lode Model and TfPose Estimator
+        # Load Model and TfPose Estimator
         logger.debug('initialization %s : %s' % (MODEL_NAME, get_graph_path(MODEL_NAME)))
         self.w, self.h = model_wh(RESIZE_SCALE)
         if self.w > 0 and self.h > 0:
@@ -41,15 +41,18 @@ class PoseMonitor:
         self.ap = actionPredictor()
 
         # Open Camera
-        logger.info('cam read+')
-        if CAMERA_INDEX is not None:
-            self.cap = cv2.VideoCapture(CAMERA_INDEX)
-            logger.info('Opening camera...')
-        else:
-            self.cap = cv2.VideoCapture(VIDEO_PATH) 
-            logger.info('Reading video...')
-        if not self.cap.isOpened():
-            logger.error('Error opening video stream or file! ')
+        # logger.info('cam read+')
+        # if CAMERA_INDEX == "Zed":
+        # #     self.cam = zed
+        #     logger.info('Opening Zed Camera...')
+        # elif CAMERA_INDEX is not None:
+        #     self.cap = cv2.VideoCapture(CAMERA_INDEX)
+        #     logger.info('Opening camera...')
+        # else:
+        #     self.cap = cv2.VideoCapture(VIDEO_PATH) 
+        #     logger.info('Reading video...')
+        # if not self.cap.isOpened():
+        #     logger.error('Error opening video stream or file! ')
 
 
     def _text_save(self, filename, data):
@@ -96,25 +99,31 @@ class PoseMonitor:
 
         return joints_humans
 
-    def run(self):
+    def run(self, camera):
 
-        if not self.cap.isOpened():
-            logger.error('Error opening video stream or file')
+        # if not self.cap.isOpened():
+        #     logger.error('Error opening video stream or file')
 
         frame_cnt = 0 # 控制帧率
 
-        while self.cap.isOpened():
+        # while self.cap.isOpened():
+        while True:
 
-            ret_val, image = self.cap.read()
-            if not ret_val:
-                logger.error('Error reading frame from cap!')
-                break
+            # ret_val, image = self.cap.read()
+            # if not ret_val:
+            #     logger.error('Error reading frame from cap!')
+            #     break
+            
+            # 获取ZedCamera帧数据
+            logger.info('Getting Zed frame...')
+            image = camera.get_frame()
 
             frame_cnt = frame_cnt + 1 
 
             if frame_cnt % 3 == 0: # 降低帧率为输入的1/3
                 frame_cnt = 0 # 防止溢出
-                
+
+                # 使用模型预测人体
                 humans = self.e.inference(image, resize_to_default=(self.w > 0 and self.h > 0), upsample_size=self.RESIZE_OUT_RATIO)
                 # humans is a list with a single element, a string. 
 
@@ -147,8 +156,7 @@ class PoseMonitor:
                 logger.info('Monitor is closing...')
                 break
 
-        # self.cam.release()
-        self.cap.release()
+        self.cam.release()
         cv2.destroyAllWindows()
 
 if __name__ == '__main__':
