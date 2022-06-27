@@ -116,7 +116,7 @@ class PoseMonitor:
             
             # 获取ZedCamera帧数据
             logger.info('Getting Zed frame...')
-            image = camera.get_frame()
+            image, depth_image = camera.get_frame()
 
             frame_cnt = frame_cnt + 1 
 
