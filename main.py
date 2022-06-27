@@ -1,5 +1,3 @@
-import os
-import location
 from pose import pose_monitor
 from camera.ZedCamera import ZedCamera
 

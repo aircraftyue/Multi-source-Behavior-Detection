@@ -1,6 +1,7 @@
 .vscode/*
 **/__pycache__/*
 backup/*
+output/*
 
 # Pose #
 pose/joints.txt
@@ -9,3 +10,4 @@ pose/backup/*
 pose/models/graph/cmu/graph_freeze.pb
 pose/models/graph/cmu/graph_opt.pb
 pose/models/graph/cmu/graph.pb
+

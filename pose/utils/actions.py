@@ -2,24 +2,14 @@
 # -*- coding:utf-8 -*-
 # Author：Yue Zhen
 # Date：2021-05-21
-# Description：Analyze keypoints, then predicte human's action.
+# Description：提取骨骼，转换为姿态
 
-"""Analyze keypoints, then predicte human's action.
-
-Leave one blank line.  The rest of this docstring should contain an
-overall description of the module or program.  Optionally, it may also
-contain a brief description of exported classes and functions and/or usage
-examples.
+""" 提取骨骼，转换为姿态
 
 Main Method : 
-  (1)人体髋关节中心点下降的速度大于预设的临界速度；
+  (1)人体髋关节中心点下降的速度大于预设的临界速度； # 不再考虑此因素
   (2)人体纵向中心线与地面的倾斜角小于预设的临界倾斜角；
   (3)人体外接矩形宽高比大于预设的临界比值。
-
-  Typical usage example:
-
-  foo = ClassFoo()
-  bar = foo.FunctionBar()
 """
 import math
 import logging
@@ -48,14 +38,6 @@ class Joints(IntEnum):
     LKnee = 12
     RAnkle = 10
     LAnkle = 13
-
-# class Status(IntEnum):
-#     STAND = 0
-#     STAND_STILL = 1
-#     STAND_WALKING = 2
-#     FALL = 3
-#     SIT = 4
-#     LIE = 5
 
 class actionPredictor:
 
@@ -183,7 +165,7 @@ class actionPredictor:
         logger.debug(f'human_orientation: human_angle = {human_angle}')
         return human_angle
 
-    # TODO：求宽高比
+    # TODO: 考虑未识别到腿的情况，此时会导致aspect_ratio比实际大很多
     def body_box_calculation(self, keypoints, index):
         """计算人体外接框宽高比
 
@@ -208,6 +190,7 @@ class actionPredictor:
 
         return aspect_ratio
 
+    # 不考虑移动速度，不再使用此方法
     def speed_detection(self, keypoints, index):
         """计算人体移动速度
 
@@ -255,14 +238,6 @@ class actionPredictor:
         # 取两者差值，作为上半身角度变化速度（但可以由human_orientation部分实现），效果不好
         # delta_position = delta_position_neck - delta_position_hip
 
-        # logger.debug(f'speed_detection: x_hip={x_hip}, x_hip_old={x_hip_old}, \
-        #     y_hip={y_hip}, y_hip_old={y_hip_old}')
-        # logger.debug(f'speed_detection: x_neck={x_neck}, x_neck_old={x_neck_old}, \
-        #     y_neck={y_neck}, y_neck_old={y_neck_old}')   
-        # logger.debug(f'speed_detection: delta_position_hip={delta_position_hip}, \
-        #     delta_position_neck={delta_position_neck}, \
-        #     delta_position={delta_position}')   
-
         # 计算两帧间时间差        
         frame_time_now = time.time()
         delta_time = frame_time_now - self.frame_time
@@ -298,13 +273,6 @@ class actionPredictor:
             # 增加一组cache
             self.speed_caches.append([0,0,0, 0,0,0, 0,0,0])
             moving_times = 0
-        
-        # if (moving_speed >= 1.0):
-        #     self.speed_cache.append('Moving')
-        # else:
-        #     self.speed_cache.append('Still')
-        # self.speed_cache.pop(0)
-        # moving_times = self.speed_cache.count('Moving')
 
         if moving_times >= 2:
             moving_status = 1
@@ -318,7 +286,7 @@ class actionPredictor:
         alert = False
         self.statuses_cache.append(status)
         self.statuses_cache.pop(0)
-        fall_times = self.statuses_cache.count('Fall')
+        fall_times = self.statuses_cache.count('Fall')  # 统计缓存中跌倒帧的次数
         if fall_times >= 3:
             alert = True
         logger.debug(f'alert_decision: fall_times={fall_times}, statuses_cache={self.statuses_cache}, alert={alert}')
@@ -327,6 +295,7 @@ class actionPredictor:
     # TODO:完善决策
     def action_analysis(self, human_angle, aspect_ratio, moving_speed=0, moving_status=0):
         """结合纵向中心线角度、髋关节下降速度、外接矩形框宽高比等信息，分析确定当前状态
+        Update：将静卧也判定为摔倒
         
         return：返回状态，字符串格式
 
@@ -339,17 +308,12 @@ class actionPredictor:
             4. 移动状态（重要指标）：0-sit,lie,stand(still) | 1-stand(walking),fall
             5. TODO 状态切换：stand<>sit<>fall<>lie
         """
-
-        # fall_score = 0.0
-        # stand_score = 0.0
-        # sit_score = 0.0
-        # lie_score = 0.0
+        
         # NOTE:排在前面的优先级高，相同分数时返回前者
         status_score = {
             'Stand_still':0.0, 
             'Stand_walking':0.0, 
             'Fall':0.0, 
-            'Lie':0.0,
             'Sit':0.0, 
         }
 
@@ -359,46 +323,17 @@ class actionPredictor:
             status_score['Sit'] += 0.8
         else:
             status_score['Fall'] += 0.8
-            status_score['Lie'] += 0.8
         
         if aspect_ratio < self.ASPECT_RATIO:
             status_score['Stand_still'] += 0.8
             status_score['Stand_walking'] += 0.8
         elif aspect_ratio > 1/self.ASPECT_RATIO:
-            status_score['Lie'] += 0.8
+            status_score['Fall'] += 0.8
         else:
             status_score['Fall'] += 0.8
             status_score['Sit'] += 0.8
-
-        if moving_speed < self.MOVING_SPEED:
-            status_score['Stand_still'] += 0.8
-            status_score['Stand_walking'] += 0.8
-            status_score['Sit'] += 0.8
-            status_score['Lie'] += 0.8
-        else:
-            status_score['Fall'] += 0.8
-        
-        if moving_status == 1:
-            status_score['Fall'] += 1.0
-            status_score['Stand_walking'] += 1.0
-        else:
-            status_score['Stand_still'] += 1.0
-            status_score['Sit'] += 1.0
-            status_score['Lie'] += 1.0
-
 
         score_max, status_max = max(zip(status_score.values(), status_score.keys()))
-
-        # 不使用MOVE_STATUS了，直接返回key就好了
-
-        # if fall_score > 1.5:
-        #     # 'Fall'
-        #     status = self.MOVE_STATUS[self.FALL]
-        # else:
-        #     # 'Stand'
-        #     status = self.MOVE_STATUS[self.STAND]
-        # # 'Sit
-        # status = self.MOVE_STATUS[self.SIT]
         logger.debug(f'action_analysis: status_max = {status_max}, status_score={status_score}')
         return status_max
 
@@ -423,9 +358,13 @@ class actionPredictor:
         """
         joints_humans: a list, consist of joints(a dict) of each human
         body_box: x, y, w, h. (x, y) is center
+        return: 
+            - self.statuses: 画面内人的姿态
+            - alert: 是否有人跌倒
         """
         # clear self.statuses list
         self.statuses = []
+        alert = False
         # 此时传入的是多人数据，下面对每个人分别处理
         for index, joints in enumerate(joints_humans):
             # 首先预处理关节数据，生成自定的关节格式
@@ -437,11 +376,6 @@ class actionPredictor:
                 # BUG：但若之前识别出的人此时未检测到，那么将导致index指向错误的人
                 human_angle = self.human_orientation(keypoints, index)
                 aspect_ratio = self.body_box_calculation(keypoints, index)
-                moving_speed, moving_status = self.speed_detection(keypoints, index)
-                cv2.putText(image,
-                    "[{}]Speed: {:.2f}".format(index, moving_speed),
-                    (10, 30+120*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    (255, 255, 0), 2)
                 cv2.putText(image,
                     "[{}]Ratio: {:.2f}".format(index, aspect_ratio),
                     (10, 60+120*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
@@ -450,19 +384,13 @@ class actionPredictor:
                     f"[{index}]Angle: {human_angle}",
                     (10, 90+120*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (255, 255, 0), 2)
-                cv2.putText(image,
-                    f"[{index}]Moving Status: {moving_status}",
-                    (10, 120+120*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    (0, 255, 255), 2)
-                # logger.debug(f'analyze_joints: human_angle={human_angle}, aspect_ratio={aspect_ratio}, moving_speed={moving_speed}')
-                # status = self.action_analysis(human_angle, moving_speed, aspect_ratio)
-                status = self.action_analysis(human_angle, aspect_ratio, moving_speed, moving_status)
+                status = self.action_analysis(human_angle, aspect_ratio)
                 alert = self.alert_decision(status)
                 if(alert):
                     cv2.putText(image,
                         "FALLING ALERT!!!",
-                        (180, 180),  cv2.FONT_HERSHEY_DUPLEX, 3,
-                        (0, 0, 255), 5)
+                        (150, 80),  cv2.FONT_HERSHEY_DUPLEX, fontScale=1,
+                        color=(0, 0, 255), thickness=2)
                 self.statuses.append(f'{[index]}' + status)
             else:
                 # 为了statuses内元素数量，与识别到的人数相匹配，避免出现索引越界情况
@@ -471,10 +399,10 @@ class actionPredictor:
                 if(alert):
                     cv2.putText(image,
                         "FALLING ALERT!!!",
-                        (180, 180),  cv2.FONT_HERSHEY_DUPLEX, 3,
-                        (0, 0, 255), 5)
+                        (150, 80),  cv2.FONT_HERSHEY_DUPLEX, fontScale=1,
+                        color=(0, 0, 255), thickness=2)
                 self.statuses.append(status)
                 logger.debug('analyze_joints: keypoints is False!')
             
-        return self.statuses
+        return self.statuses, alert
 

@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 import time
 import cv2
@@ -18,8 +19,7 @@ logger.addHandler(ch)
 class PoseMonitor:
     """
     """
-    def __init__(self, camera_index=0):
-        CAMERA_INDEX = camera_index
+    def __init__(self):
         MODEL_NAME = 'cmu'
         self.SAVE_TXT_PATH = 'pose/joints.txt'  # Ubuntu
         RESIZE_SCALE = '432x368'      # resize images before they are processed
@@ -101,37 +101,38 @@ class PoseMonitor:
 
     def run(self, camera):
 
-        # if not self.cap.isOpened():
-        #     logger.error('Error opening video stream or file')
-
         frame_cnt = 0 # 控制帧率
+        t_alert = time.time() # 记录alert时间并防止频繁报警
 
-        # while self.cap.isOpened():
         while True:
-
-            # ret_val, image = self.cap.read()
-            # if not ret_val:
-            #     logger.error('Error reading frame from cap!')
-            #     break
             
-            # 获取ZedCamera帧数据
-            logger.info('Getting Zed frame...')
-            image, depth_image = camera.get_frame()
+            image, depth_image = camera.get_frame() # 获取ZedCamera帧数据
 
-            frame_cnt = frame_cnt + 1 
-
+            frame_cnt = frame_cnt + 1
             if frame_cnt % 3 == 0: # 降低帧率为输入的1/3
                 frame_cnt = 0 # 防止溢出
 
+                ############################
+                #===========核心===========#          
                 # 使用模型预测人体
                 humans = self.e.inference(image, resize_to_default=(self.w > 0 and self.h > 0), upsample_size=self.RESIZE_OUT_RATIO)
                 # humans is a list with a single element, a string. 
-
-                # Extract joints from humans.
+                # 提起人体关键点
                 joints_humans = self._extract_joints(humans) 
-                # Analyze the coordinate of body part.
-                statuses = self.ap.analyze_joints(image, joints_humans)
-                logger.info(f'Statuses: {statuses}')
+                # 分析姿态
+                statuses, alert = self.ap.analyze_joints(image, joints_humans)
+                # logger.debug(f'Statuses: {statuses}')
+                #==========================# 
+                ############################
+                
+                # alert屏蔽时间5s内只报一次
+                if alert and (time.time() - t_alert > 3):
+                    t_alert = time.time()   # 更新alert时间
+                    t_str = datetime.now().strftime('%Y-%m-%d, %H:%M:%S')
+                    logger.info(f"\n=====\nFALLING ALERT !!! \ntime: {t_str}\n=====\n")
+                    # alert时保存一帧照片
+                    cv2.imwrite("./output/fall_"+datetime.now().strftime('%Y%m%d_%H%M%S')+".jpg", image)
+                    
                 # Draw skeleton.
                 image, body_boxes = TfPoseEstimator.draw_skeleton(image, humans, statuses, imgcopy=False)
 
