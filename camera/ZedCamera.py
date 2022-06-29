@@ -73,13 +73,18 @@ class ZedCamera:
             
             image = cv2.cvtColor(image_ocv, 1) # shape:(360,640,3)
             
-        return image, depth_image_ocv
+        return image, depth_image_ocv, self.depth_map
         
     def get_distance(self, x, y):
-        # # 抓一帧深度map
+        """获取指定图像坐标的三维深度
+        
+        Returns:
+            距离相机的距离，单位为cm
+        """
+        # 抓一帧深度map
         # err = self.zed.grab(self.runtime)
         # if err == sl.ERROR_CODE.SUCCESS :
-        #     self.zed.retrieve_image(self.depth_map, sl.MEASURE.DEPTH, sl.MEM.GPU, self.image_size)
+        #   self.zed.retrieve_image(self.depth_map, sl.MEASURE.DEPTH, sl.MEM.GPU, self.image_size)
         # 获取图像中坐标(x,y)处物体距离相机的距离
         err, depth_value = self.depth_map.get_value(x, y)
         if err == sl.ERROR_CODE.SUCCESS :

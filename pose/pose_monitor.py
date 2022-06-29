@@ -7,6 +7,8 @@ from pose.tf_pose.estimator import TfPoseEstimator
 from pose.tf_pose.networks import get_graph_path, model_wh
 from pose.utils.actions import actionPredictor
 
+import pyzed.sl as sl
+
 # Log Setting.
 logger = logging.getLogger('TfPoseEstimator-WebCam')
 logger.setLevel(logging.DEBUG)
@@ -99,6 +101,19 @@ class PoseMonitor:
 
         return joints_humans
 
+    def get_location(self, image, human_centers, camera):
+        # 通过Zed相机获取深度
+        for index, human_center in enumerate(human_centers):
+            x, y = human_center  # x,y 为坐标比例(0,0)~(1,1)
+            # 转换为像素坐标
+            w, h = image.shape[1], image.shape[0]
+            x, y = round(x*w), round(y*h)
+            z_3d = camera.get_distance(x, y)
+            print(f"Person[{index}] | Distance to Camera at ({x},{y}): {z_3d:.3f}cm")
+            # TODO: 利用投影矩阵计算出实际三维空间的坐标 x_3d, y_3d
+
+
+
     def run(self, camera):
 
         frame_cnt = 0 # 控制帧率
@@ -106,7 +121,7 @@ class PoseMonitor:
 
         while True:
             
-            image, depth_image = camera.get_frame() # 获取ZedCamera帧数据
+            image, _, _ = camera.get_frame() # 获取ZedCamera帧数据
 
             frame_cnt = frame_cnt + 1
             if frame_cnt % 3 == 0: # 降低帧率为输入的1/3
@@ -119,8 +134,11 @@ class PoseMonitor:
                 # humans is a list with a single element, a string. 
                 # 提起人体关键点
                 joints_humans = self._extract_joints(humans) 
-                # 分析姿态
-                statuses, alert = self.ap.analyze_joints(image, joints_humans)
+                # 分析姿态，返回人体姿态、跌倒警报、人体中心点
+                statuses, alert, human_centers = self.ap.analyze_joints(image, joints_humans)
+                # logger.debug(f"\n----------------\nhuman_centers: {human_centers}\n----------------")
+                # TODO：三维定位
+                self.get_location(image, human_centers, camera)
                 # logger.debug(f'Statuses: {statuses}')
                 #==========================# 
                 ############################

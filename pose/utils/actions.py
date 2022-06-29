@@ -165,6 +165,17 @@ class actionPredictor:
         logger.debug(f'human_orientation: human_angle = {human_angle}')
         return human_angle
 
+    def get_human_center(self, keypoints):
+        """计算人体中心点坐标
+        
+        利用三点确定：Neck + Hips
+        center坐标是在整张图像中的比例，左上角为(0,0)，右下角为(1,1)
+        """
+        x_neck, y_neck = self.get_neck_position(keypoints)
+        x_hip, y_hip = self.get_hip_position(keypoints)
+        x_center, y_center = round((x_neck + x_hip)/2,2), round((y_neck + y_hip)/2,2) # 取平均再保留两位小数
+        return (x_center, y_center)
+        
     # TODO: 考虑未识别到腿的情况，此时会导致aspect_ratio比实际大很多
     def body_box_calculation(self, keypoints, index):
         """计算人体外接框宽高比
@@ -189,7 +200,7 @@ class actionPredictor:
         # 可以与 1.0 进行比较，当ratio明显小于1时说明是Stand状态，明显大于1时说明是非Stand状态。
 
         return aspect_ratio
-
+        
     # 不考虑移动速度，不再使用此方法
     def speed_detection(self, keypoints, index):
         """计算人体移动速度
@@ -361,10 +372,12 @@ class actionPredictor:
         return: 
             - self.statuses: 画面内人的姿态
             - alert: 是否有人跌倒
+            - center: 人体中心点
         """
         # clear self.statuses list
         self.statuses = []
         alert = False
+        human_centers = []
         # 此时传入的是多人数据，下面对每个人分别处理
         for index, joints in enumerate(joints_humans):
             # 首先预处理关节数据，生成自定的关节格式
@@ -375,6 +388,8 @@ class actionPredictor:
                 # 检测当前人体的信息，通过index对应不同人体
                 # BUG：但若之前识别出的人此时未检测到，那么将导致index指向错误的人
                 human_angle = self.human_orientation(keypoints, index)
+                human_center = self.get_human_center(keypoints)
+                human_centers.append(human_center)
                 aspect_ratio = self.body_box_calculation(keypoints, index)
                 cv2.putText(image,
                     "[{}]Ratio: {:.2f}".format(index, aspect_ratio),
@@ -383,6 +398,10 @@ class actionPredictor:
                 cv2.putText(image,
                     f"[{index}]Angle: {human_angle}",
                     (10, 90+120*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (255, 255, 0), 2)
+                cv2.putText(image,
+                    f"[{index}]Center: {human_center}",
+                    (10, 120+120*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (255, 255, 0), 2)
                 status = self.action_analysis(human_angle, aspect_ratio)
                 alert = self.alert_decision(status)
@@ -404,5 +423,5 @@ class actionPredictor:
                 self.statuses.append(status)
                 logger.debug('analyze_joints: keypoints is False!')
             
-        return self.statuses, alert
+        return self.statuses, alert, human_centers
 
