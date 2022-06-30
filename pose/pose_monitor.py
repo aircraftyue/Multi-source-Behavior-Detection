@@ -103,6 +103,7 @@ class PoseMonitor:
 
     def get_location(self, image, human_centers, camera):
         # 通过Zed相机获取深度
+        locations = []
         for index, human_center in enumerate(human_centers):
             x, y = human_center  # x,y 为坐标比例(0,0)~(1,1)
             # 转换为像素坐标
@@ -110,7 +111,10 @@ class PoseMonitor:
             x, y = round(x*w), round(y*h)
             Xc, Yc, Zc  = camera.get_camera_coord(x, y)
             print(f"Person[{index}] | Coord of Camera at ({x},{y}): ({Xc:.0f},{Yc:.0f},{Zc:.0f})")
+            locations.append((Xc, Yc, Zc))
             # TODO: 输出坐标；检测多人场景的人物匹配情况
+        return locations
+        
 
 
 
@@ -118,6 +122,9 @@ class PoseMonitor:
 
         frame_cnt = 0 # 控制帧率
         t_alert = time.time() # 记录alert时间并防止频繁报警
+        
+        h = int(camera.image_size.height)
+        w = int(camera.image_size.width)
 
         while True:
             
@@ -138,7 +145,7 @@ class PoseMonitor:
                 statuses, alert, human_centers = self.ap.analyze_joints(image, joints_humans)
                 # logger.debug(f"\n----------------\nhuman_centers: {human_centers}\n----------------")
                 # 三维定位
-                self.get_location(image, human_centers, camera)
+                locations = self.get_location(image, human_centers, camera)
                 #==========================# 
                 ############################
                 
@@ -157,6 +164,16 @@ class PoseMonitor:
                             "FPS: %f" % (1.0 / (time.time() - self.fps_time)),
                             (10, 10),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                             (0, 255, 0), 2)
+                
+                for index, (Xc, Yc, Zc) in enumerate(locations):
+                    cv2.putText(image,
+                            f"[{index}]Location: ({round(Xc/10,1)}, {round(Yc/10,1)}, {round(Zc/10,1)})cm",
+                            (200, 10+120*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            (255, 255, 0), 2)
+                
+                # Xc, Yc 轴
+                cv2.line(image, pt1=(0,int(h/2)), pt2=(w,int(h/2)), color=(255,0,0), thickness=1) # X轴
+                cv2.line(image, pt1=(int(w/2),0), pt2=(int(w/2),h), color=(255,0,0), thickness=1) # Y轴
 
                 # TODO: GUI读取这里更新好的image,显示在GUI内部窗口区域上
                 cv2.imshow('tf-pose-estimation result', image)
