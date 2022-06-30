@@ -108,9 +108,9 @@ class PoseMonitor:
             # 转换为像素坐标
             w, h = image.shape[1], image.shape[0]
             x, y = round(x*w), round(y*h)
-            z_3d = camera.get_distance(x, y)
-            print(f"Person[{index}] | Distance to Camera at ({x},{y}): {z_3d:.3f}cm")
-            # TODO: 利用投影矩阵计算出实际三维空间的坐标 x_3d, y_3d
+            Xc, Yc, Zc  = camera.get_camera_coord(x, y)
+            print(f"Person[{index}] | Coord of Camera at ({x},{y}): ({Xc:.0f},{Yc:.0f},{Zc:.0f})")
+            # TODO: 输出坐标；检测多人场景的人物匹配情况
 
 
 
@@ -137,9 +137,8 @@ class PoseMonitor:
                 # 分析姿态，返回人体姿态、跌倒警报、人体中心点
                 statuses, alert, human_centers = self.ap.analyze_joints(image, joints_humans)
                 # logger.debug(f"\n----------------\nhuman_centers: {human_centers}\n----------------")
-                # TODO：三维定位
+                # 三维定位
                 self.get_location(image, human_centers, camera)
-                # logger.debug(f'Statuses: {statuses}')
                 #==========================# 
                 ############################
                 
