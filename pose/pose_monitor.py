@@ -7,6 +7,7 @@ from pose.tf_pose.estimator import TfPoseEstimator
 from pose.tf_pose.networks import get_graph_path, model_wh
 from pose.utils.actions import actionPredictor
 
+from camera.ZedCamera import ZedCamera
 import pyzed.sl as sl
 
 # Log Setting.
@@ -29,6 +30,7 @@ class PoseMonitor:
         self.fps_time = 0            # used to calculate fps.
         self.i = 0                   # used to save img from camera.
         self.close_monitor = False
+        self.output = [] # 汇总检测结果：[alert, locations]
         VIDEO_PATH = './pose/videos/fall_50_ways.mp4' # for test
 
         # Load Model and TfPose Estimator
@@ -42,37 +44,22 @@ class PoseMonitor:
         # Analyze the coordinate of body part. Get actionPredictor object.
         self.ap = actionPredictor()
 
-        # Open Camera
-        # logger.info('cam read+')
-        # if CAMERA_INDEX == "Zed":
-        # #     self.cam = zed
-        #     logger.info('Opening Zed Camera...')
-        # elif CAMERA_INDEX is not None:
-        #     self.cap = cv2.VideoCapture(CAMERA_INDEX)
-        #     logger.info('Opening camera...')
-        # else:
-        #     self.cap = cv2.VideoCapture(VIDEO_PATH) 
-        #     logger.info('Reading video...')
-        # if not self.cap.isOpened():
-        #     logger.error('Error opening video stream or file! ')
-
-
     def _text_save(self, filename, data):
         """
-        This is used to save data into file.
+        用于保存数据
         """
         with open(filename, 'a') as file:   # Ubuntu
             file.write(str(data) + '\n')
         logger.info('saved as file.')
 
     def _extract_joints(self, humans):
-        """This is used to extract joints(body parts) data from skeleton.
+        """从骨骼中提取关节数据(body parts)
 
         Return: joints_humans
-        joints_humans: a list consist of each human's joints_dict
-        joints_dict: a dict consist of each joint; key is idx, value is BodyPart(class, has part_idx, x, y...)
+        joints_humans: 包含每个人的 joints_dict 的列表
+        joints_dict: 包含每个关节的字典; key is idx, value is BodyPart(class, has part_idx, x, y...)
         idx: body part index(eg. 0 for nose)
-        x, y: coordinate of body part (relative to the image size)
+        x, y: body part的坐标 (相对于图像尺寸，是个比例)
         """
         idx = 0
         x = 0
@@ -102,21 +89,29 @@ class PoseMonitor:
         return joints_humans
 
     def get_location(self, image, human_centers, camera):
+        """获得人体三维定位坐标
+
+        Args:
+            image : 二维图像
+            human_centers : 人体中心点二维相对坐标
+            camera : Zed深度相机
+
+        Returns:
+            locations: 相机坐标系下的三维坐标点
+        """
         # 通过Zed相机获取深度
         locations = []
         for index, human_center in enumerate(human_centers):
-            x, y = human_center  # x,y 为坐标比例(0,0)~(1,1)
+            x, y = human_center  # x,y 为坐标比例(0.0, 0.0)~(1.0, 1.0)
             # 转换为像素坐标
             w, h = image.shape[1], image.shape[0]
             x, y = round(x*w), round(y*h)
             Xc, Yc, Zc  = camera.get_camera_coord(x, y)
-            print(f"Person[{index}] | Coord of Camera at ({x},{y}): ({Xc:.0f},{Yc:.0f},{Zc:.0f})")
+            # print(f"Person[{index}] | Coord of Camera at ({x},{y}): ({Xc:.0f},{Yc:.0f},{Zc:.0f})")
             locations.append((Xc, Yc, Zc))
-            # TODO: 输出坐标；检测多人场景的人物匹配情况
+            # TODO: 测试 - 检测多人场景的人物匹配情况
         return locations
         
-
-
 
     def run(self, camera):
 
@@ -125,6 +120,8 @@ class PoseMonitor:
         
         h = int(camera.image_size.height)
         w = int(camera.image_size.width)
+        
+        self.output = [] # 汇总检测结果：[alert, locations]
 
         while True:
             
@@ -134,67 +131,75 @@ class PoseMonitor:
             if frame_cnt % 3 == 0: # 降低帧率为输入的1/3
                 frame_cnt = 0 # 防止溢出
 
-                ############################
-                #===========核心===========#          
+                #================核心================#          
                 # 使用模型预测人体
                 humans = self.e.inference(image, resize_to_default=(self.w > 0 and self.h > 0), upsample_size=self.RESIZE_OUT_RATIO)
-                # humans is a list with a single element, a string. 
                 # 提起人体关键点
                 joints_humans = self._extract_joints(humans) 
                 # 分析姿态，返回人体姿态、跌倒警报、人体中心点
-                statuses, alert, human_centers = self.ap.analyze_joints(image, joints_humans)
-                # logger.debug(f"\n----------------\nhuman_centers: {human_centers}\n----------------")
+                statuses, alerts, human_centers = self.ap.analyze_joints(image, joints_humans)
                 # 三维定位
                 locations = self.get_location(image, human_centers, camera)
-                #==========================# 
-                ############################
-                
+                #====================================# 
+
+
+                #================图注================# 
+                # 显示骨骼图
+                image, body_boxes = TfPoseEstimator.draw_skeleton(image, humans, statuses, imgcopy=False)
+                # 显示 FPS
+                cv2.putText(image,
+                            "FPS: %f" % (1.0 / (time.time() - self.fps_time)),
+                            (10, 10),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            (0, 255, 0), 2)
+                # 显示三维位置信息
+                for index, (Xc, Yc, Zc) in enumerate(locations):
+                    cv2.putText(image,
+                            f"[{index}]Location: ({round(Xc/10,1)}, {round(Yc/10,1)}, {round(Zc/10,1)})cm",
+                            (200, 10+30*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                            (255, 255, 0), 2)
+                # 显示Xc, Yc 轴
+                cv2.line(image, pt1=(0,int(h/2)), pt2=(w,int(h/2)), color=(255,0,0), thickness=1) # X轴
+                cv2.line(image, pt1=(int(w/2),0), pt2=(int(w/2),h), color=(255,0,0), thickness=1) # Y轴
+                #====================================#
+                                
+                                
+                #================警报================# 
                 # alert屏蔽时间5s内只报一次
-                if alert and (time.time() - t_alert > 3):
+                if (True in alerts) and (time.time() - t_alert > 3):
                     t_alert = time.time()   # 更新alert时间
                     t_str = datetime.now().strftime('%Y-%m-%d, %H:%M:%S')
                     logger.info(f"\n=====\nFALLING ALERT !!! \ntime: {t_str}\n=====\n")
                     # alert时保存一帧照片
                     cv2.imwrite("./output/fall_"+datetime.now().strftime('%Y%m%d_%H%M%S')+".jpg", image)
-                    
-                # Draw skeleton.
-                image, body_boxes = TfPoseEstimator.draw_skeleton(image, humans, statuses, imgcopy=False)
-
-                cv2.putText(image,
-                            "FPS: %f" % (1.0 / (time.time() - self.fps_time)),
-                            (10, 10),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                            (0, 255, 0), 2)
+                #====================================#  
                 
-                for index, (Xc, Yc, Zc) in enumerate(locations):
-                    cv2.putText(image,
-                            f"[{index}]Location: ({round(Xc/10,1)}, {round(Yc/10,1)}, {round(Zc/10,1)})cm",
-                            (200, 10+120*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                            (255, 255, 0), 2)
                 
-                # Xc, Yc 轴
-                cv2.line(image, pt1=(0,int(h/2)), pt2=(w,int(h/2)), color=(255,0,0), thickness=1) # X轴
-                cv2.line(image, pt1=(int(w/2),0), pt2=(int(w/2),h), color=(255,0,0), thickness=1) # Y轴
-
+                #================输出================#
                 # TODO: GUI读取这里更新好的image,显示在GUI内部窗口区域上
                 cv2.imshow('tf-pose-estimation result', image)
+                self.output.append((locations, statuses))
+                #====================================# 
+                
                 self.fps_time = time.time()
 
-            # 每帧检测控制按键
+
+            #================控制================#
             if (cv2.waitKey(1) & 0xFF) == 27: # ESC
                 break
             if (cv2.waitKey(1) & 0xFF) == ord('s'):
                 saved_status = cv2.imwrite('./images/saved/saved_%d.jpg'%self.i, image)
                 logger.debug(f'cv2.imwrite: saved_status = {saved_status}')
                 self.i += 1
-
             if self.close_monitor:
                 logger.info('Monitor is closing...')
                 break
-
+            #====================================#
+            
         self.cam.release()
         cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     print('Run Pose Monitor separately.')
-    monitor = PoseMonitor(camera_index=0) # camera_index: None is video
-    monitor.run()
+    cam = ZedCamera()
+    monitor = PoseMonitor()
+    monitor.run(cam)

@@ -82,10 +82,7 @@ class actionPredictor:
     def __str__(self):
         return '[actionPredictor]'
 
-    def get_key_joints(self,joints):
-        return self.keypoints
-
-    def get_status(self, joints):
+    def get_status(self):
         return self.statuses
 
     def joints_filter(self, joints):
@@ -370,13 +367,13 @@ class actionPredictor:
         joints_humans: a list, consist of joints(a dict) of each human
         body_box: x, y, w, h. (x, y) is center
         return: 
-            - self.statuses: 画面内人的姿态
-            - alert: 是否有人跌倒
-            - center: 人体中心点
+            - self.statuses: 画面内人的姿态，字符串列表
+            - alerts: 是否有人跌倒, True/False列表
+            - human_centers: 人体中心点，元组列表
         """
         # clear self.statuses list
         self.statuses = []
-        alert = False
+        alerts = []
         human_centers = []
         # 此时传入的是多人数据，下面对每个人分别处理
         for index, joints in enumerate(joints_humans):
@@ -405,23 +402,25 @@ class actionPredictor:
                     (255, 255, 0), 2)
                 status = self.action_analysis(human_angle, aspect_ratio)
                 alert = self.alert_decision(status)
+                alerts.append(alert)
                 if(alert):
                     cv2.putText(image,
                         "FALLING ALERT!!!",
-                        (150, 80),  cv2.FONT_HERSHEY_DUPLEX, fontScale=1,
+                        (250, 150),  cv2.FONT_HERSHEY_DUPLEX, fontScale=1,
                         color=(0, 0, 255), thickness=2)
                 self.statuses.append(f'{[index]}' + status)
             else:
                 # 为了statuses内元素数量，与识别到的人数相匹配，避免出现索引越界情况
                 status = None
                 alert = self.alert_decision(status)
+                alerts.append(alert)
                 if(alert):
                     cv2.putText(image,
                         "FALLING ALERT!!!",
-                        (150, 80),  cv2.FONT_HERSHEY_DUPLEX, fontScale=1,
+                        (250, 150),  cv2.FONT_HERSHEY_DUPLEX, fontScale=1,
                         color=(0, 0, 255), thickness=2)
                 self.statuses.append(status)
                 logger.debug('analyze_joints: keypoints is False!')
             
-        return self.statuses, alert, human_centers
+        return self.statuses, alerts, human_centers
 
