@@ -291,6 +291,7 @@ class actionPredictor:
         return moving_speed, moving_status
     
     def alert_decision(self, status):
+        # BUG：不同人共用同一个cache，导致画面中只要一个人跌倒则所有人的alert都为True
         alert = False
         self.statuses_cache.append(status)
         self.statuses_cache.pop(0)

@@ -30,7 +30,9 @@ class PoseMonitor:
         self.fps_time = 0            # used to calculate fps.
         self.i = 0                   # used to save img from camera.
         self.close_monitor = False
-        self.output = [] # 汇总检测结果：[alert, locations]
+        self.pose_result = () # 汇总所有人姿态结果：(statues, locations)
+        self.fall_result = () # 汇总跌倒检测结果：(alert, locations, time)
+
         VIDEO_PATH = './pose/videos/fall_50_ways.mp4' # for test
 
         # Load Model and TfPose Estimator
@@ -111,7 +113,22 @@ class PoseMonitor:
             locations.append((Xc, Yc, Zc))
             # TODO: 测试 - 检测多人场景的人物匹配情况
         return locations
-        
+
+    def get_fall_result(self):
+        """获取最新姿态情况
+
+        Returns:
+            元组: 列表-姿态字符串, 列表-所有人的三维坐标
+        """
+        return self.pose_result # statuses, locations
+    
+    def get_fall_result(self):
+        """获取最新跌倒情况
+
+        Returns:
+            元组: 字符串-"Fall", 列表-所有跌倒人的三维坐标, 字符串-跌倒时间
+        """
+        return self.fall_result # "Fall", fall_locations, t_str
 
     def run(self, camera):
 
@@ -120,8 +137,6 @@ class PoseMonitor:
         
         h = int(camera.image_size.height)
         w = int(camera.image_size.width)
-        
-        self.output = [] # 汇总检测结果：[alert, locations]
 
         while True:
             
@@ -165,19 +180,30 @@ class PoseMonitor:
                                 
                 #================警报================# 
                 # alert屏蔽时间5s内只报一次
-                if (True in alerts) and (time.time() - t_alert > 3):
+                if (True in alerts) and (time.time() - t_alert > 5):
+                    print(alerts)
+                    fall_locations = []  # 保存所有跌倒人的坐标
+                    # print(statuses) # statuses包含索引和状态信息['[0]Sit', '[1]Fall']
+                    # 通过statuses判断谁跌倒了
+                    for index, status in enumerate(statuses):
+                        if "Fall" in status:
+                            fall_locations.append(locations[index]) # 坐标单位为mm
                     t_alert = time.time()   # 更新alert时间
                     t_str = datetime.now().strftime('%Y-%m-%d, %H:%M:%S')
                     logger.info(f"\n=====\nFALLING ALERT !!! \ntime: {t_str}\n=====\n")
+                    
                     # alert时保存一帧照片
                     cv2.imwrite("./output/fall_"+datetime.now().strftime('%Y%m%d_%H%M%S')+".jpg", image)
+                    # 预留输出接口
+                    self.fall_result = ("Fall", fall_locations, t_str)
+                    print(self.fall_result)
                 #====================================#  
                 
                 
                 #================输出================#
                 # TODO: GUI读取这里更新好的image,显示在GUI内部窗口区域上
                 cv2.imshow('tf-pose-estimation result', image)
-                self.output.append((locations, statuses))
+                self.pose_result = (statuses, locations)   # 所有人的坐标和状态
                 #====================================# 
                 
                 self.fps_time = time.time()
