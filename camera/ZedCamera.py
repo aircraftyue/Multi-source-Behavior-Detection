@@ -67,6 +67,30 @@ class ZedCamera:
                                                 [0, None, None],
                                                 [0, 0, 1]])
         
+        #####################
+        ##    外参矩阵
+        #####################
+        # 绕X轴旋转90°（逆时针为正）
+        self.R_x90 = np.array([[1, 0, 0],
+                               [0, 0, 1],
+                               [0, -1, 0]])
+        # 绕X轴旋转180°
+        self.R_x180 = np.array([[1, 0, 0],
+                                [0, -1, 0],
+                                [0, 0, -1]])
+        
+        #================标定参数================#
+        # Zed旋转矩阵： 使用 Zed Demo - position tracking 测量出的R(以拍摄位为终点)，取反后使用matlab函数eul2rotm转换得到
+        self.external_RZed = np.array([[0.599017449319739, 0.403227077528133, -0.691799117778127],
+                                    [-0.0905326328236623, 0.892519192553525, 0.441829529703052],
+                                    [0.795601620036366, -0.202033202399321, 0.571139779146738]])
+        # 相机标定位到世界坐标原点间平移：使用尺子测量出，单位m
+        self.external_t = np.array([[0],[0],[2]])
+        #========================================#
+        
+        # 旋转矩阵：从相机使用位，到相机标定位，再到世界坐标系的旋转
+        self.external_R = self.R_x90.dot((self.R_x180.dot(self.external_RZed)).dot(self.R_x180))
+        
         
     def calculate_coord_camera(self, coord_pixel, Zc):
         """将像素坐标转换到相机坐标系下
@@ -88,7 +112,25 @@ class ZedCamera:
         
     # TODO：增加世界坐标系的转换
     def calculate_coord_world(self, coord_camera):
-        pass
+        """将像素坐标转换到相机坐标系下
+
+        Args:
+            coord_pixel (元组): 像素坐标点(u,v)，单位为像素
+            Zc (标量): 从Zed相机获取到的深度值，相机坐标系的z值
+
+        Returns:
+            标量: 世界坐标系的坐标点，单位为m
+        """
+        Xc, Yc, Zc = coord_camera
+        Xc /= 1000 # mm -> m
+        Yc /= 1000
+        Zc /= 1000 
+        coord_world = np.matmul(self.external_R, np.array([[Xc],[Yc],[Zc]])) + self.external_t
+        Xw = coord_world[0][0] 
+        Yw = coord_world[1][0]
+        Zw = coord_world[2][0]
+        
+        return Xw, Yw, Zw
         
     def get_frame(self):
         # 抓一帧左图和深度图
@@ -132,6 +174,7 @@ class ZedCamera:
     
     def get_camera_coord(self, x, y):
         """获取指定图像坐标的三维坐标
+        图像坐标系 -> 相机坐标系
         
         Returns:
             Xc, Yc, Zc : 相机坐标系的坐标点，单位为mm
@@ -139,6 +182,17 @@ class ZedCamera:
         err, Zc = self.depth_map.get_value(x, y)
         coord_pixel = (x/self.scale, y/self.scale) # 用于匹配像素图的放缩
         return self.calculate_coord_camera(coord_pixel, Zc)
+    
+    def get_world_coord(self, x, y):
+        """获取指定图像坐标的世界坐标系下的三维坐标
+        图像坐标系 -> 相机坐标系 - > 世界坐标系
+        
+        Returns:
+            Xc, Yc, Zc : 相机坐标系的坐标点，单位为m
+        """
+        coord_camera = self.get_camera_coord(x, y)
+        return self.calculate_coord_world(coord_camera)
+        
             
 
 if __name__ == "__main__":
@@ -156,8 +210,12 @@ if __name__ == "__main__":
             for j in range(4):
                 y = 100 + j*200
                 Xc, Yc, Zc = cam.get_camera_coord(x,y)
+                Xw, Yw, Zw = cam.get_world_coord(x,y)
                 cv2.circle(depth, (x,y), radius=5, color=(255,255,0), thickness=-1)
-                cv2.putText(depth, f"({Xc:.1f},{Yc:.1f},{Zc:.1f}", (x,y), cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.4, color=(255,0,255), thickness=1)
+                cv2.putText(depth, f"C({Xc:.1f},{Yc:.1f},{Zc:.1f})mm", (x,y), 
+                            cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.4, color=(0,0,255), thickness=1)
+                cv2.putText(depth, f"W({Xw:.1f},{Yw:.1f},{Zw:.1f})m", (x,y+15), 
+                            cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.4, color=(255,0,255), thickness=1)
             # cv2.imshow("Image", image)
             cv2.imshow("Depth", depth)
 

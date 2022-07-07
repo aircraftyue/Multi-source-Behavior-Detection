@@ -108,9 +108,10 @@ class PoseMonitor:
             # 转换为像素坐标
             w, h = image.shape[1], image.shape[0]
             x, y = round(x*w), round(y*h)
-            Xc, Yc, Zc  = camera.get_camera_coord(x, y)
-            # print(f"Person[{index}] | Coord of Camera at ({x},{y}): ({Xc:.0f},{Yc:.0f},{Zc:.0f})")
-            locations.append((Xc, Yc, Zc))
+            # X, Y, Z  = camera.get_camera_coord(x, y)
+            X, Y, Z  = camera.get_world_coord(x, y)
+            # print(f"Person[{index}] | Coord of Camera at ({x},{y}): ({X:.0f},{Y:.0f},{Z:.0f})")
+            locations.append((X, Y, Z))
             # TODO: 测试 - 检测多人场景的人物匹配情况
         return locations
 
@@ -167,9 +168,9 @@ class PoseMonitor:
                             (10, 10),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                             (0, 255, 0), 2)
                 # 显示三维位置信息
-                for index, (Xc, Yc, Zc) in enumerate(locations):
+                for index, (X, Y, Z) in enumerate(locations):
                     cv2.putText(image,
-                            f"[{index}]Location: ({round(Xc/10,1)}, {round(Yc/10,1)}, {round(Zc/10,1)})cm",
+                            f"[{index}]Location: ({round(X,2)}, {round(Y,2)}, {round(Z,2)})m",
                             (200, 10+30*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                             (255, 255, 0), 2)
                 # 显示Xc, Yc 轴
