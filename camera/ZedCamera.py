@@ -4,12 +4,38 @@
 # @File        :ZedCamera.py
 # @Description :封装zed摄像头
 
-import os
 import sys
 import cv2
 import pyzed.sl as sl
 import numpy as np
+import math
 
+ 
+def eul2rotm(theta):
+    """欧拉角转旋转矩阵
+    theta：PYR角(rx, ry, rz)
+
+    Returns:
+        np array: 旋转矩阵
+    """
+    rx, ry, rz = theta
+    Rx = np.array([[1,     0,                   0],
+                   [0,     math.cos(rx),        -math.sin(rx)],
+                   [0,     math.sin(rx),        math.cos(rx)]
+                   ])
+ 
+    Ry = np.array([[math.cos(ry),  0,  math.sin(ry)],
+                    [0,             1,  0],
+                    [-math.sin(ry),  0,  math.cos(ry)]
+                    ])
+ 
+    Rz = np.array([[math.cos(rz),  -math.sin(rz),   0],
+                    [math.sin(rz), math.cos(rz),   0],
+                    [0,             0,              1]
+                    ])
+    R = Rz.dot(Ry.dot(Rx))
+    return R
+ 
 class ZedCamera:
     def __init__(self):
         
@@ -70,26 +96,40 @@ class ZedCamera:
         #####################
         ##    外参矩阵
         #####################
+        # 齐次坐标
         # 绕X轴旋转90°（逆时针为正）
-        self.R_x90 = np.array([[1, 0, 0],
-                               [0, 0, 1],
-                               [0, -1, 0]])
+        T_x90 = np.array([[1,  0,  0,  0],
+                          [0,  0,  1,  0],
+                          [0, -1,  0,  0],
+                          [0,  0,  0,  1]])
         # 绕X轴旋转180°
-        self.R_x180 = np.array([[1, 0, 0],
-                                [0, -1, 0],
-                                [0, 0, -1]])
+        T_x180 = np.array([[1,  0,  0,  0],
+                           [0, -1,  0,  0],
+                           [0,  0, -1,  0],
+                           [0,  0,  0,  1]])
         
         #================标定参数================#
-        # Zed旋转矩阵： 使用 Zed Demo - position tracking 测量出的R(以拍摄位为终点)，取反后使用matlab函数eul2rotm转换得到
-        self.external_RZed = np.array([[0.599017449319739, 0.403227077528133, -0.691799117778127],
-                                    [-0.0905326328236623, 0.892519192553525, 0.441829529703052],
-                                    [0.795601620036366, -0.202033202399321, 0.571139779146738]])
+        # Zed Positional Tracking 获取到两组值
+        eul_Zed = (-0.23, -0.9, -0.14)  # Zed旋转矩阵：position tracking测量出的r(以拍摄位为终点)
+        t_Zed = [0.03, -0.02, -0.04]    # Zed平移向量：position tracking测量出的t(以拍摄位为终点)
+
         # 相机标定位到世界坐标原点间平移：使用尺子测量出，单位m
-        self.external_t = np.array([[0],[0],[2]])
+        t_World = [0, 0, 1.74]
         #========================================#
         
-        # 旋转矩阵：从相机使用位，到相机标定位，再到世界坐标系的旋转
-        self.external_R = self.R_x90.dot((self.R_x180.dot(self.external_RZed)).dot(self.R_x180))
+        # 生成对应的变换矩阵
+        rotmZed = eul2rotm(eul_Zed)
+        external_T_Zed = np.array([[rotmZed[0][0], rotmZed[0][1],  rotmZed[0][2],  t_Zed[0]],
+                                   [rotmZed[1][0], rotmZed[1][1],  rotmZed[1][2],  t_Zed[1]],
+                                   [rotmZed[2][0], rotmZed[2][1],  rotmZed[2][2],  t_Zed[2]],
+                                   [0,             0,              0,              1]])
+        # 相机标定位到世界坐标原点间旋转矩阵：绕x轴旋转90，z平移2m
+        external_T_World = np.array([[1,  0,  0,  t_World[0]],
+                                     [0,  0,  1,  t_World[1]],
+                                     [0,  -1, 0,  t_World[2]],
+                                     [0,  0,  0,  1]])
+        # 旋转矩阵：从相机使用位，到相机标定位，再到世界坐标系的旋转和平移
+        self.external_T = external_T_World.dot((T_x180.dot(external_T_Zed)).dot(T_x180))
         
         
     def calculate_coord_camera(self, coord_pixel, Zc):
@@ -125,7 +165,8 @@ class ZedCamera:
         Xc /= 1000 # mm -> m
         Yc /= 1000
         Zc /= 1000 
-        coord_world = np.matmul(self.external_R, np.array([[Xc],[Yc],[Zc]])) + self.external_t
+        # coord_world = np.matmul(self.external_R, np.array([[Xc],[Yc],[Zc]])) + self.external_t
+        coord_world = self.external_T.dot(np.array([[Xc],[Yc],[Zc],[1]]))
         Xw = coord_world[0][0] 
         Yw = coord_world[1][0]
         Zw = coord_world[2][0]
