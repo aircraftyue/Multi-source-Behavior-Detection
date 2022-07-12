@@ -32,6 +32,7 @@ class PoseMonitor:
         self.close_monitor = False
         self.pose_result = () # 汇总所有人姿态结果：(statues, locations)
         self.fall_result = () # 汇总跌倒检测结果：(alert, locations, time)
+        self.fall_result_dict = {}
 
         VIDEO_PATH = './pose/videos/fall_50_ways.mp4' # for test
 
@@ -184,6 +185,7 @@ class PoseMonitor:
                 if (True in alerts) and (time.time() - t_alert > 5):
                     print(alerts)
                     fall_locations = []  # 保存所有跌倒人的坐标
+                    self.fall_result_dict = {}
                     # print(statuses) # statuses包含索引和状态信息['[0]Sit', '[1]Fall']
                     # 通过statuses判断谁跌倒了
                     for index, status in enumerate(statuses):
@@ -196,8 +198,13 @@ class PoseMonitor:
                     # alert时保存一帧照片
                     cv2.imwrite("./output/fall_"+datetime.now().strftime('%Y%m%d_%H%M%S')+".jpg", image)
                     # 预留输出接口
-                    self.fall_result = ("Fall", fall_locations, t_str)
+                    self.fall_result = ("fall", fall_locations, t_str)
+                    self.fall_result_dict["status"] = "fall"
+                    self.fall_result_dict["location"] = fall_locations
+                    self.fall_result_dict["time"] = str(t_str)
+                    
                     print(self.fall_result)
+                    print(self.fall_result_dict)
                 #====================================#  
                 
                 
