@@ -110,11 +110,12 @@ class ZedCamera:
         
         #================标定参数================#
         # Zed Positional Tracking 获取到两组值
-        eul_Zed = (-0.23, -0.9, -0.14)  # Zed旋转矩阵：position tracking测量出的r(以拍摄位为终点)
-        t_Zed = [0.03, -0.02, -0.04]    # Zed平移向量：position tracking测量出的t(以拍摄位为终点)
+        t_Zed = [0.06, -0.00, -0.06]    # Zed平移向量：position tracking测量出的t(以拍摄位为终点)
+        eul_Zed = (-0.3, -1.26, -0.22)  # Zed旋转矩阵：position tracking测量出的r(以拍摄位为终点)
+        
 
         # 相机标定位到世界坐标原点间平移：使用尺子测量出，单位m
-        t_World = [0, 0, 1.74]
+        t_World = [0, 0, 1.81]
         #========================================#
         
         # 生成对应的变换矩阵

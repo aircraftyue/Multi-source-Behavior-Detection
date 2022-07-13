@@ -111,6 +111,10 @@ class PoseMonitor:
             x, y = round(x*w), round(y*h)
             # X, Y, Z  = camera.get_camera_coord(x, y)
             X, Y, Z  = camera.get_world_coord(x, y)
+            
+            # 根据实际测试环境手动误差校正
+            X += 0.18
+            
             # print(f"Person[{index}] | Coord of Camera at ({x},{y}): ({X:.0f},{Y:.0f},{Z:.0f})")
             locations.append((X, Y, Z))
             # TODO: 测试 - 检测多人场景的人物匹配情况
@@ -189,6 +193,8 @@ class PoseMonitor:
                     # print(statuses) # statuses包含索引和状态信息['[0]Sit', '[1]Fall']
                     # 通过statuses判断谁跌倒了
                     for index, status in enumerate(statuses):
+                        # BUG: 低概率报错：NoneType
+                        # print(f"status={status}")
                         if "Fall" in status:
                             fall_locations.append(locations[index]) # 坐标单位为mm
                     t_alert = time.time()   # 更新alert时间
