@@ -33,6 +33,8 @@ class PoseMonitor:
         self.pose_result = () # 汇总所有人姿态结果：(statues, locations)
         self.fall_result = () # 汇总跌倒检测结果：(alert, locations, time)
         self.fall_result_dict = {}
+        self.human_locations = []
+        self.THRESH_Z = 0.7     # 通过三维坐标的Z判断是否跌倒
 
         VIDEO_PATH = './pose/videos/fall_50_ways.mp4' # for test
 
@@ -174,10 +176,17 @@ class PoseMonitor:
                             (0, 255, 0), 2)
                 # 显示三维位置信息
                 for index, (X, Y, Z) in enumerate(locations):
-                    cv2.putText(image,
-                            f"[{index}]Location: ({round(X,2)}, {round(Y,2)}, {round(Z,2)})m",
-                            (200, 10+30*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                            (255, 255, 0), 2)
+                    if Z < self.THRESH_Z:
+                        cv2.putText(image,
+                                f"[{index}]Location - Low Z: ({round(X,2)}, {round(Y,2)}, {round(Z,2)})m",
+                                (200, 10+30*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                (0, 0, 255), 2)
+                        
+                    else:
+                        cv2.putText(image,
+                                f"[{index}]Location: ({round(X,2)}, {round(Y,2)}, {round(Z,2)})m",
+                                (200, 10+30*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                (0, 255, 255), 2)
                 # 显示Xc, Yc 轴
                 cv2.line(image, pt1=(0,int(h/2)), pt2=(w,int(h/2)), color=(255,0,0), thickness=1) # X轴
                 cv2.line(image, pt1=(int(w/2),0), pt2=(int(w/2),h), color=(255,0,0), thickness=1) # Y轴
@@ -187,7 +196,7 @@ class PoseMonitor:
                 #================警报================# 
                 # alert屏蔽时间5s内只报一次
                 if (True in alerts) and (time.time() - t_alert > 5):
-                    print(alerts)
+                    # print(alerts)
                     fall_locations = []  # 保存所有跌倒人的坐标
                     self.fall_result_dict = {}
                     # print(statuses) # statuses包含索引和状态信息['[0]Sit', '[1]Fall']
@@ -197,9 +206,12 @@ class PoseMonitor:
                         # print(f"status={status}")
                         if "Fall" in status:
                             fall_locations.append(locations[index]) # 坐标单位为mm
+                        # # 如果z坐标小于阈值，则也判定为跌倒
+                        # if locations[index][2] < self.THRESH_Z:
+                        #     fall_locations.append(locations[index])
                     t_alert = time.time()   # 更新alert时间
                     t_str = datetime.now().strftime('%Y-%m-%d, %H:%M:%S')
-                    logger.info(f"\n=====\nFALLING ALERT !!! \ntime: {t_str}\n=====\n")
+                    logger.info(f"\n=====\nFALLING ALERT !!! \ntime: {t_str}\nlocations:{fall_locations}\n=====\n")
                     
                     # alert时保存一帧照片
                     cv2.imwrite("./output/fall_"+datetime.now().strftime('%Y%m%d_%H%M%S')+".jpg", image)
@@ -209,8 +221,7 @@ class PoseMonitor:
                     self.fall_result_dict["location"] = fall_locations
                     self.fall_result_dict["time"] = str(t_str)
                     
-                    print(self.fall_result)
-                    print(self.fall_result_dict)
+                    print(f"Fall result: {self.fall_result_dict}")
                 #====================================#  
                 
                 
@@ -218,6 +229,7 @@ class PoseMonitor:
                 # TODO: GUI读取这里更新好的image,显示在GUI内部窗口区域上
                 cv2.imshow('tf-pose-estimation result', image)
                 self.pose_result = (statuses, locations)   # 所有人的坐标和状态
+                self.human_locations = locations
                 #====================================# 
                 
                 self.fps_time = time.time()
