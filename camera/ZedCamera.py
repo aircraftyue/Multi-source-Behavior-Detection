@@ -109,28 +109,56 @@ class ZedCamera:
                            [0,  0,  0,  1]])
         
         #================标定参数================#
-        # Zed Positional Tracking 获取到两组值
-        t_Zed = [0.06, -0.00, -0.06]    # Zed平移向量：position tracking测量出的t(以拍摄位为终点)
-        eul_Zed = (-0.3, -1.26, -0.22)  # Zed旋转矩阵：position tracking测量出的r(以拍摄位为终点)
+        # # Zed Positional Tracking 获取到两组值（当相机旋转中心在本机时使用，一次性测得水平和竖直旋转的变量）
+        # t_Zed = [0.07, -0.09, -0.03]    # Zed平移向量：position tracking测量出的t(以拍摄位为终点)
+        # eul_Zed = (-0.44, -1.05, -0.3)  # Zed旋转矩阵：position tracking测量出的r(以拍摄位为终点)
         
+        # （当相机旋转中心不在本机时，分开测量）
+        # 先水平转测得一组值，初始状态应全为0
+        t_Zed_h = [0.04, 0.01, -0.04]    
+        eul_Zed_h = (-0.01, -0.87, 0.01)  
+        # 再竖直转测得一组值，初始状态为水平转后的结果，但t、r数值也应全为0
+        t_Zed_v = [0.0, -0.01, -0.03]    
+        eul_Zed_v = (-0.51, 0.0, 0.02)  
 
         # 相机标定位到世界坐标原点间平移：使用尺子测量出，单位m
-        t_World = [0, 0, 1.81]
+        t_World = [-0.47, -0.31, 2.13]
+        
+        # # 相机支架旋转中心平移
+        # t_tripod = [0, 0, -0.06]
         #========================================#
         
         # 生成对应的变换矩阵
-        rotmZed = eul2rotm(eul_Zed)
-        external_T_Zed = np.array([[rotmZed[0][0], rotmZed[0][1],  rotmZed[0][2],  t_Zed[0]],
-                                   [rotmZed[1][0], rotmZed[1][1],  rotmZed[1][2],  t_Zed[1]],
-                                   [rotmZed[2][0], rotmZed[2][1],  rotmZed[2][2],  t_Zed[2]],
-                                   [0,             0,              0,              1]])
+        # rotmZed = eul2rotm(eul_Zed)
+        rotmZed_h = eul2rotm(eul_Zed_h)
+        rotmZed_v = eul2rotm(eul_Zed_v)
+        
+        
+        # external_T_Zed = np.array([[rotmZed[0][0], rotmZed[0][1],  rotmZed[0][2],  t_Zed[0]],
+        #                            [rotmZed[1][0], rotmZed[1][1],  rotmZed[1][2],  t_Zed[1]],
+        #                            [rotmZed[2][0], rotmZed[2][1],  rotmZed[2][2],  t_Zed[2]],
+        #                            [0,             0,              0,              1]])
+        
+        external_T_Zed_v = np.array([[rotmZed_v[0][0], rotmZed_v[0][1],  rotmZed_v[0][2],  t_Zed_v[0]],
+                                     [rotmZed_v[1][0], rotmZed_v[1][1],  rotmZed_v[1][2],  t_Zed_v[1]],
+                                     [rotmZed_v[2][0], rotmZed_v[2][1],  rotmZed_v[2][2],  t_Zed_v[2]],
+                                     [0,             0,              0,              1]])
+        external_T_Zed_h = np.array([[rotmZed_h[0][0], rotmZed_h[0][1],  rotmZed_h[0][2],  t_Zed_h[0]],
+                                     [rotmZed_h[1][0], rotmZed_h[1][1],  rotmZed_h[1][2],  t_Zed_h[1]],
+                                     [rotmZed_h[2][0], rotmZed_h[2][1],  rotmZed_h[2][2],  t_Zed_h[2]],
+                                     [0,             0,              0,              1]])
+        
         # 相机标定位到世界坐标原点间旋转矩阵：绕x轴旋转90，z平移2m
         external_T_World = np.array([[1,  0,  0,  t_World[0]],
                                      [0,  0,  1,  t_World[1]],
                                      [0,  -1, 0,  t_World[2]],
                                      [0,  0,  0,  1]])
+
         # 旋转矩阵：从相机使用位，到相机标定位，再到世界坐标系的旋转和平移
-        self.external_T = external_T_World.dot((T_x180.dot(external_T_Zed)).dot(T_x180))
+        # self.external_T = external_T_World.dot((T_x180.dot(external_T_Zed)).dot(T_x180))
+        
+        # 由c0到cn是先水平再竖直，还原时是先左乘竖直再左乘水平
+        self.external_T = external_T_World.dot((T_x180.dot(external_T_Zed_h.dot(external_T_Zed_v))).dot(T_x180))
         
         
     def calculate_coord_camera(self, coord_pixel, Zc):
