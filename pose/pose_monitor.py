@@ -35,6 +35,7 @@ class PoseMonitor:
         self.fall_result_dict = {}
         self.human_locations = []
         self.THRESH_Z = 0.7     # 通过三维坐标的Z判断是否跌倒
+        self.flag_alert = False
 
         VIDEO_PATH = './pose/videos/fall_50_ways.mp4' # for test
 
@@ -114,7 +115,7 @@ class PoseMonitor:
             # X, Y, Z  = camera.get_camera_coord(x, y)
             X, Y, Z  = camera.get_world_coord(x, y)
             
-            # 根据实际测试环境手动误差校正
+            # 根据实际测试环境手动误差校正，考虑身体厚度因素
             X += 0.18
             
             # print(f"Person[{index}] | Coord of Camera at ({x},{y}): ({X:.0f},{Y:.0f},{Z:.0f})")
@@ -142,6 +143,7 @@ class PoseMonitor:
 
         frame_cnt = 0 # 控制帧率
         t_alert = time.time() # 记录alert时间并防止频繁报警
+        t_emit = time.time()
         
         h = int(camera.image_size.height)
         w = int(camera.image_size.width)
@@ -221,8 +223,24 @@ class PoseMonitor:
                     self.fall_result_dict["location"] = fall_locations
                     self.fall_result_dict["time"] = str(t_str)
                     
-                    print(f"Fall result: {self.fall_result_dict}")
-                #====================================#  
+                    print(f"+++++++++++\nFall result: \n{self.fall_result_dict}\n+++++++++++\n")
+                    
+                    self.flag_alert = True
+                
+                # 保持 flag_alert置为True 5秒钟，超过5秒重置为False。同时更新结果为非跌倒状态
+                if time.time() - t_alert > 5:
+                    t_str = datetime.now().strftime('%Y-%m-%d, %H:%M:%S')
+                    self.flag_alert = False
+                    self.fall_result = ("normal", [], t_str)
+                    self.fall_result_dict["status"] = "normal"
+                    self.fall_result_dict["location"] = []
+                    self.fall_result_dict["time"] = str(t_str)
+                    if time.time() - t_emit > 1:
+                        print(f"+++++++++++\nFall result: \n{self.fall_result_dict}\n+++++++++++\n")
+                        t_emit = time.time()
+                    else:
+                        pass
+                #====================================# 
                 
                 
                 #================输出================#
