@@ -320,22 +320,19 @@ class actionPredictor:
         
         # NOTE:排在前面的优先级高，相同分数时返回前者
         status_score = {
-            'Stand_still':0.0, 
-            'Stand_walking':0.0, 
+            'Stand':0.0, 
             'Fall':0.0, 
             'Sit':0.0, 
         }
 
         if human_angle in range(-self.HUMAN_ANGLE, self.HUMAN_ANGLE):
-            status_score['Stand_still'] += 0.8
-            status_score['Stand_walking'] += 0.8
+            status_score['Stand'] += 0.8
             status_score['Sit'] += 0.8
         else:
             status_score['Fall'] += 0.8
         
         if aspect_ratio < self.ASPECT_RATIO:
-            status_score['Stand_still'] += 0.8
-            status_score['Stand_walking'] += 0.8
+            status_score['Stand'] += 0.8
         elif aspect_ratio > 1/self.ASPECT_RATIO:
             status_score['Fall'] += 0.8
         else:

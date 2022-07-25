@@ -167,7 +167,29 @@ class PoseMonitor:
                 locations = self.get_location(image, human_centers, camera)
                 #====================================# 
 
-
+                #==============定位警报==============# 
+                # 显示三维位置信息，过低的Z被补充判定为跌倒
+                for index, (X, Y, Z) in enumerate(locations):
+                    if Z < self.THRESH_Z:
+                        cv2.putText(image,
+                                f"[{index}]Location - Low Z: ({round(X,2)}, {round(Y,2)}, {round(Z,2)})m",
+                                (200, 10+30*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                (0, 0, 255), 2)
+                        cv2.putText(image,
+                            "FALLING ALERT!!! - Low Z",
+                            (250, 150),  cv2.FONT_HERSHEY_DUPLEX, fontScale=1,
+                            color=(0, 0, 255), thickness=2)
+                        # TODO:将低Z的对应人的状态改掉
+                        print(f"old status: {statuses[index]}")
+                        statuses[index] = f'[{index}]Fall'
+                        print(f"new status: {statuses[index]}")
+                    else:
+                        cv2.putText(image,
+                                f"[{index}]Location: ({round(X,2)}, {round(Y,2)}, {round(Z,2)})m",
+                                (200, 10+30*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                                (0, 255, 255), 2)
+                #====================================#
+                        
                 #================图注================# 
                 # 显示骨骼图
                 image, body_boxes = TfPoseEstimator.draw_skeleton(image, humans, statuses, imgcopy=False)
@@ -176,22 +198,15 @@ class PoseMonitor:
                             "FPS: %f" % (1.0 / (time.time() - self.fps_time)),
                             (10, 10),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                             (0, 255, 0), 2)
-                # 显示三维位置信息
-                for index, (X, Y, Z) in enumerate(locations):
-                    if Z < self.THRESH_Z:
-                        cv2.putText(image,
-                                f"[{index}]Location - Low Z: ({round(X,2)}, {round(Y,2)}, {round(Z,2)})m",
-                                (200, 10+30*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                                (0, 0, 255), 2)
-                        
-                    else:
-                        cv2.putText(image,
-                                f"[{index}]Location: ({round(X,2)}, {round(Y,2)}, {round(Z,2)})m",
-                                (200, 10+30*index),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                                (0, 255, 255), 2)
+                
                 # 显示Xc, Yc 轴
                 cv2.line(image, pt1=(0,int(h/2)), pt2=(w,int(h/2)), color=(255,0,0), thickness=1) # X轴
                 cv2.line(image, pt1=(int(w/2),0), pt2=(int(w/2),h), color=(255,0,0), thickness=1) # Y轴
+                # ROI
+                cv2.line(image, pt1=(200,100), pt2=(150,450), color=(0,255,0), thickness=2) 
+                cv2.line(image, pt1=(150,450), pt2=(800,450), color=(0,255,0), thickness=2) 
+                cv2.line(image, pt1=(800,450), pt2=(750,100), color=(0,255,0), thickness=2) 
+                cv2.line(image, pt1=(750,100), pt2=(200,100), color=(0,255,0), thickness=2) 
                 #====================================#
                                 
                                 
