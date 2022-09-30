@@ -160,7 +160,6 @@ class ZedCamera:
         # 由c0到cn是先水平再竖直，还原时是先左乘竖直再左乘水平
         self.external_T = external_T_World.dot((T_x180.dot(external_T_Zed_h.dot(external_T_Zed_v))).dot(T_x180))
         
-        
     def calculate_coord_camera(self, coord_pixel, Zc):
         """将像素坐标转换到相机坐标系下
 
@@ -179,13 +178,11 @@ class ZedCamera:
         
         return Xc, Yc, Zc
         
-    # TODO：增加世界坐标系的转换
     def calculate_coord_world(self, coord_camera):
-        """将像素坐标转换到相机坐标系下
+        """将相机坐标转换到世界坐标系下
 
         Args:
-            coord_pixel (元组): 像素坐标点(u,v)，单位为像素
-            Zc (标量): 从Zed相机获取到的深度值，相机坐标系的z值
+            coord_camera (元组): 相机坐标点(u,v)，单位为毫米
 
         Returns:
             标量: 世界坐标系的坐标点，单位为m
@@ -201,6 +198,32 @@ class ZedCamera:
         Zw = coord_world[2][0]
         
         return Xw, Yw, Zw
+
+    def calculate_coord_pixel(self, coord_world):
+        """将世界坐标转换到像素/图像坐标系下
+
+        Args:
+            coord_world (元组): 世界坐标点(u,v)，单位为米
+
+        Returns:
+            标量: 像素坐标系的坐标点，单位为像素
+        """
+        Xw, Yw, Zw = coord_world
+        
+        # 世界转相机
+        coord_camera = np.linalg.inv(self.external_T).dot(np.array([[Xw],[Yw],[Zw],[1]])) * 1000  # m -> mm 
+        
+        Xc = coord_camera[0][0] 
+        Yc = coord_camera[1][0]
+        Zc = coord_camera[2][0]
+        
+        # 相机转图像
+        coord_pixel = self.intrinsic_matrix_1080p.dot(np.array([[Xc],[Yc*self.scale],[1]])) / Zc  * self.scale
+        
+        u = coord_pixel[0][0]
+        v = coord_pixel[1][0]
+        
+        return u, v
         
     def get_frame(self):
         # 抓一帧左图和深度图
@@ -262,7 +285,18 @@ class ZedCamera:
         """
         coord_camera = self.get_camera_coord(x, y)
         return self.calculate_coord_world(coord_camera)
-        
+    
+    # BUG: 检查公式，目前测试结果不对
+    def get_pixel_coord(self, x, y, z):
+        """由世界坐标获取图像坐标
+        世界坐标系 -> 相机坐标系 - > 图像坐标系
+        Args:
+            x, y, z: 指定世界坐标
+        Returns:
+            x, y: 图像坐标
+        """
+        coord_world = x, y, z
+        return self.calculate_coord_pixel(coord_world)
             
 
 if __name__ == "__main__":
@@ -270,24 +304,30 @@ if __name__ == "__main__":
     cam = ZedCamera()
     h = int(cam.image_size.height)
     w = int(cam.image_size.width)
+    print(h,w)
     
     while True:
         image, depth, _ = cam.get_frame()
-        cv2.line(depth, pt1=(0,int(h/2)), pt2=(w,int(h/2)), color=(255,0,0), thickness=1) # X轴
-        cv2.line(depth, pt1=(int(w/2),0), pt2=(int(w/2),h), color=(255,0,0), thickness=1) # Y轴
+        cv2.line(image, pt1=(0,int(h/2)), pt2=(w,int(h/2)), color=(255,0,0), thickness=1) # X轴
+        cv2.line(image, pt1=(int(w/2),0), pt2=(int(w/2),h), color=(255,0,0), thickness=1) # Y轴
+        # ROI
+        cv2.line(image, pt1=(200,100), pt2=(150,450), color=(0,255,0), thickness=2) 
+        cv2.line(image, pt1=(150,450), pt2=(800,450), color=(0,255,0), thickness=2) 
+        cv2.line(image, pt1=(800,450), pt2=(750,100), color=(0,255,0), thickness=2) 
+        cv2.line(image, pt1=(750,100), pt2=(200,100), color=(0,255,0), thickness=2) 
         for i in range(5):
             x = 200 + i*300
             for j in range(4):
                 y = 100 + j*200
                 Xc, Yc, Zc = cam.get_camera_coord(x,y)
                 Xw, Yw, Zw = cam.get_world_coord(x,y)
-                cv2.circle(depth, (x,y), radius=5, color=(255,255,0), thickness=-1)
-                cv2.putText(depth, f"C({Xc:.1f},{Yc:.1f},{Zc:.1f})mm", (x,y), 
+                cv2.circle(image, (x,y), radius=5, color=(255,255,0), thickness=-1)
+                cv2.putText(image, f"C({Xc:.1f},{Yc:.1f},{Zc:.1f})mm", (x,y), 
                             cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.4, color=(0,0,255), thickness=1)
-                cv2.putText(depth, f"W({Xw:.1f},{Yw:.1f},{Zw:.1f})m", (x,y+15), 
+                cv2.putText(image, f"W({Xw:.1f},{Yw:.1f},{Zw:.1f})m", (x,y+15), 
                             cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.4, color=(255,0,255), thickness=1)
             # cv2.imshow("Image", image)
-            cv2.imshow("Depth", depth)
+            cv2.imshow("Depth", image)
 
         if (cv2.waitKey(1) & 0xFF) == 27: # ESC
             break
